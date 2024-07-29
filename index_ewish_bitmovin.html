@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Bitmovin SDK - Getting Started WEB SDK</title>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script type="text/javascript" src="https://cdn.bitmovin.com/player/web/8.43.0/bitmovinplayer.js"></script>
+</head>
+<body>
+
+<!-- STEP 2 - Provide a player container element-->
+<div id="my-player"></div>
+
+<p> Select user preferences.</p>
+
+<form >
+  <label for="preferences">Select a mode:</label>
+  <select name="preferences" id="preferences">
+    <option value="save_data">Reduce Data Usage</option>
+    <option value="high_quality">Highest Quality</option>
+    <option value="balance" selected>Balanced</option>
+	<!-- Added the option to focus on reducing the energy consumption -->
+    <option value="save_energy" selected>Reduce Energy Consumption</option>
+  </select>
+  <br><br>
+  <label for="quality_function">Select a quality function:</label>
+  <select name="quality_function" id="quality_function">
+    <option value="linear"select>Linear</option>
+    <option value="logarithm">Logarithm</option>
+  </select>
+  <br><br>
+  <button type="button" onclick="getUserConfiguration()"> Submit</button>
+</form>
+
+<script>
+var qualitySwitches = 0
+const buffer_size = 40
+var throughputHistory = [];
+
+var initTime = 0;
+var stalls = [];
+
+// Add a boolean parameter to decide whether the weights should be mathematically determined or empirically tweaked
+const isMathDet = false;
+
+// I11: Audio input information, I23: Stalling information, I13: Video input information
+var itu_t_input = {"IGen": {"displaySize": "1920x1080", "device": "pc", "viewingDistance": 150}, "I13": {"streamId": 42, "segments": []}, "I11": {"streamId": 42, "segments": []}, "I23": {"streamId": 42, "stalling": []}};
+const jsonFilename = "itu_t_input.json";
+
+var currentQuality = null;
+var sameRepCount = 0;
+var MIN_BUFFER_RATIO = 0.2;
+var alpha = 0;
+var beta = 0;
+var gamma = 0;
+var denominator_exp = 0;
+
+var smoothThroughputKbps = 0;
+var num_downloaded_segments = 0;
+var selected_quality_index_array = [];
+var selected_segment_durations = [];
+
+var availableVideoQualities;
+var last_selected_quality = 0;
+var next_selected_quality = 0;
+var bitratesKbps = [];
+var SD = 4;
+var currentBufferS;
+var lastBufferS;
+var downloadedData
+
+var low_buff_thresS = 0;
+var lastThroughputKbps = 0;
+var qualityFunction = null;
+var multiplier = 1;
+// Add initialization of m_xi, m_delta, and the weights
+var m_xi = 1;
+var m_delta = 1;
+var alpha = 0.25;
+var beta = 0.25;
+var gamma = 0.25;
+var psi = 0.25;
+var fps = 30;
+// Add parameters for the energy cost computation // For smartphone
+const aPar = 24.71;
+const bPar = 1121.5;
+// -------
+var maxResolution = 2160;
+var videoThroughputKbps = 0;
+var audioThroughputKbps = 0;
+
+
+//<!-- STEP 3 - Configure and Initialize the player-->
+var playerConfig = {
+  "key": "ADD-YOUR-KEY-HERE",
+  "playback": {
+    "muted": true,
+    "autoplay": true
+  },
+  style: {
+        width: '640px',
+        height: '480px'
+  },
+  tweaks: {
+    file_protocol: true,
+    app_id: 'ANY_STRING_ID',
+    max_buffer_level: buffer_size
+  },
+  adaptation: {
+    onVideoAdaptation: wishmmsp
+  },
+}
+
+var container = document.getElementById('my-player');
+var player = new bitmovin.player.Player(container, playerConfig);
+
+/* Event Handler */
+player.on(bitmovin.player.PlayerEvent.StallStarted, function(playEvent) {
+    updateStalls(true, player.getCurrentTime());
+});
+
+/* Event Handler */
+player.on(bitmovin.player.PlayerEvent.StallEnded, function(playEvent) {
+    updateStalls(false, player.getCurrentTime());
+});
+
+
+function updateStalls(isStartStall, eventTime){
+	if (isStartStall) {
+		initStall = new Date().getTime();
+	} else {
+		stalls.push({"startTime": JSON.stringify(eventTime), "duration": JSON.stringify((new Date().getTime() - initStall) / 1000)});
+		console.log("New stall: ");
+		console.log(stalls[stalls.length-1]);
+	}
+}
+
+player.on(bitmovin.player.PlayerEvent.PlaybackFinished, function(playEvent) {
+    createJSON(jsonFilename);
+});
+
+
+function createJSON(filename){
+	// var fs = require('fs');
+	// Create the JSON object
+	let startTime = 0.0;
+	console.log(selected_segment_durations);
+	for (let i = 0; i < selected_quality_index_array.length; i++) {
+		let selectedIndex = getQualityIndexFromBitrate(selected_quality_index_array[i], availableVideoQualities.length);
+		itu_t_input.I13.segments.push({"codec": "h265", "start": startTime, "duration": selected_segment_durations[i], "resolution": availableVideoQualities[selectedIndex].width+"x"+availableVideoQualities[selectedIndex].height, "bitrate": selected_quality_index_array[i], "fps": fps}); // Modify
+		startTime += selected_segment_durations[i];
+	}
+	// fs.writeFile(filename, JSON.stringify(itu_t_input), function(err, result) { // Write the JSON object to file
+	// 	if(err) console.log('error', err);
+	//});
+	console.log(JSON.stringify(itu_t_input));
+}
+
+var sourceConfig = {
+    // dash: "http://127.0.0.1:81/tos_h264_4s/manifest.mpd",
+    // dash: "https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd",
+	dash = "https://cdn.bitmovin.com/content/assets/art-of-motion-dash-hls-progressive/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd";
+}
+
+function getUserConfiguration() {
+  let preference = document.getElementById('preferences')
+
+  if (isMathDet) {
+	  switch(preference.value) {
+		case "save_data":
+		  m_xi = 1;
+		  m_delta = 1;
+		  maxResolution = 720;
+		  break;
+		case "balance":
+		  m_xi = 0.75;
+		  m_delta = 0.75;
+		  maxResolution = 1080;
+		  break;
+		case "high_quality":
+		  m_xi = 0.5;
+		  m_delta = 0.5;
+		  maxResolution = 2160;
+		  break;
+		case "save_energy":
+		  m_xi = 0.75;
+		  m_delta = 0.75;
+		  maxResolution = 1080;
+		  break;
+	  }
+	} else {
+	  switch(preference.value) {
+		case "save_data":
+		  // alpha = 0.06;
+		  alpha = 0.0595
+		  beta = 0.26;
+		  gamma = 0.68;
+		  psi = alpha / 1000;
+		  // m_xi = 1;
+		  // m_delta = 1;
+		  maxResolution = 1080;
+		  break;
+		case "balance":
+		  alpha = 0.0695;
+		  beta = 0.21;
+		  gamma = 0.78;
+		  psi = alpha / 1000;
+		  // m_xi = 0.75;
+		  // m_delta = 0.75;
+		  maxResolution = 1080;
+		  break;
+		case "high_quality":
+		  alpha = 0.0795;
+		  beta = 0.08;
+		  gamma = 0.86;
+		  psi = alpha / 2000;
+		  // m_xi = 0.5;
+		  // m_delta = 0.5;
+		  maxResolution = 2160;
+		  break;
+		case "save_energy":
+		  alpha = 0.0595
+		  beta = 0.26;
+		  gamma = 0.68;
+		  // gamma = (1 - psi)/3;
+		  // gamma = 10*alpha
+		  psi = alpha / 500;
+		  // m_xi = 0.75;
+		  // m_delta = 0.75;
+		  maxResolution = 1080;
+		  break;
+	  }
+	}
+
+
+  player.load(sourceConfig).then(function() {
+    console.log('Successfully loaded Source Config!');
+    }).catch(function(reason) {
+      console.log('Error while loading source:', reason);
+    }
+  );
+}
+
+///////////////////////////////////////////////////////////////////////
+
+
+function wishmmsp() {
+  availableVideoQualities = player.getAvailableVideoQualities()
+  next_selected_quality = 0;
+  availableVideoQualities.sort(function (a, b) {
+    return a.bitrate - b.bitrate;
+  });
+
+  bitratesKbps = []
+    for (var i = 0; i < availableVideoQualities.length; i++) {
+      if (availableVideoQualities[i].height <= maxResolution)
+        bitratesKbps.push(availableVideoQualities[i].bitrate/1000);
+    }
+
+  currentBufferS = player.getVideoBufferLength();
+
+  if (!player) {
+      return;
+  }
+
+  if (player.getConfig().hasOwnProperty('tweaks') && player.getConfig().tweaks.hasOwnProperty('max_buffer_level')) {
+      maxBufferLevel = player.getConfig().tweaks.max_buffer_level;
+  } else {
+      maxBufferLevel = 20;
+  }
+
+  var init = function () {
+      player.on(bitmovin.player.PlayerEvent.DownloadFinished, onDownloadFinished);
+      player.on(bitmovin.player.PlayerEvent.SegmentPlayback, function(data) {
+        SD = data.duration;
+		selected_segment_durations.push(data.duration);
+      })
+  };
+
+  if (player.getSource()) {
+      init();
+  } else {
+      player.on(bitmovin.player.PlayerEvent.SourceLoaded, init);
+  }    
+
+  var nextQuality = onVideoAdaptation();
+  return nextQuality.id;
+}
+
+function resetBuffer() {
+  console.log(" resetBuffer ")
+  throughputHistory = [];
+}
+
+function onDownloadFinished(event) {
+  const instantThroughputKbps = (event.size > 2000) ? (event.size * 8/1000) / event.downloadTime : lastThroughputKbps;
+  if (event.downloadType === 'media/video') {
+    videoThroughputKbps = instantThroughputKbps;
+    lastThroughputKbps = Math.max(videoThroughputKbps, audioThroughputKbps)
+  } else {
+    audioThroughputKbps = instantThroughputKbps;
+    lastThroughputKbps = Math.max(videoThroughputKbps, audioThroughputKbps)
+  }
+}
+
+function getSmoothThroughput(margin, lastThroughputKbps, smoothThroughputKbps) {
+  if (lastThroughputKbps > 0) {
+      if (smoothThroughputKbps === 0) {
+          smoothThroughputKbps = lastThroughputKbps;
+      }
+      else {
+          smoothThroughputKbps = (1 - margin) * smoothThroughputKbps + margin * lastThroughputKbps;
+      }
+  }
+  else {
+      smoothThroughputKbps = 5000;    // finetune
+  }
+
+  return smoothThroughputKbps;
+}
+
+function getQualityFunction(bitrates, functionType) {
+  let qualityLevelList = [];
+  let length = bitrates.length;
+
+  if (functionType === "linear"){
+    for (let i = 0; i < length; i ++) {
+      qualityLevelList.push(1.0*bitrates[i]/bitrates[length-1]);
+
+    }
+  } else {
+    for (let i = 0; i < length; i ++) {
+      qualityLevelList.push(Math.log(bitrates[i]/bitrates[0]));
+
+    }    
+  }
+  return qualityLevelList;
+}
+
+// To be modified for mathematical determination of weights (including psi)
+function setWeightsLinear(m_xi, m_delta, qualityLevelList, segment_duration) {
+  let num_considered_bitrate=bitratesKbps.length
+  let R_max_Mbps = bitratesKbps[num_considered_bitrate-1];
+  let R_o_Mbps = bitratesKbps[num_considered_bitrate-1];
+  let thrp_optimal = bitratesKbps[num_considered_bitrate-1];
+  let last_quality_1_Mbps = bitratesKbps[num_considered_bitrate-2];
+  let optimal_delta_buffer_S = buffer_size*(m_xi - MIN_BUFFER_RATIO);
+
+  let temp_beta_alpha = optimal_delta_buffer_S/segment_duration;
+  let temp_a = 2.0*Math.exp(1+ last_quality_1_Mbps/R_max_Mbps-2.0*R_o_Mbps/R_max_Mbps);
+  let temp_b = (1 + temp_beta_alpha*SD/(optimal_delta_buffer_S))/thrp_optimal;
+
+  denominator_exp = Math.exp(2*qualityLevelList[num_considered_bitrate-1]-2*qualityLevelList[0]);
+  alpha = 1.0/(1 + temp_beta_alpha + R_max_Mbps*temp_b*denominator_exp/temp_a);
+  beta = temp_beta_alpha*alpha;
+  gamma = 1 - alpha - beta;
+}
+
+// To be modified for mathematical determination of weights (including psi)
+function setWeightsLogarit(m_xi, m_delta, qualityLevelList, segment_duration,) {
+  let num_considered_bitrate=bitratesKbps.length
+  let R_i = bitratesKbps[num_considered_bitrate-1];
+  let R_min = bitratesKbps[0];
+  let Q_k = bitratesKbps[num_considered_bitrate-2];
+  let delta_B = m_xi*buffer_size - low_buff_thresS;
+  denominator_exp = Math.exp(2*qualityLevelList[num_considered_bitrate-1]-2*qualityLevelList[0]);
+
+  alpha = 1 / (1 + 
+                delta_B/segment_duration + 
+                Math.pow(R_i,3)/(m_delta*Math.pow(R_min,2)*Q_k));
+  beta = alpha*delta_B/segment_duration;
+  gamma = 1 - alpha - beta;
+}
+
+function getTotalCost_v3(bitrates, qualityIndex,
+  estimated_throghputKbps, currentbufferS) {
+    let totalCost;
+    let bandwidthCost;
+    let bufferCost;
+    let qualityCost;
+	let energyCost; // Added energy cost
+    let current_quality_level = qualityLevelList[qualityIndex];
+
+    let temp = bitrates[qualityIndex]*1.0/estimated_throghputKbps;  // bitrates is in kbps
+    let average_quality = 0;
+    let slice_window = 10;
+    let length_quality = qualityLevelList.length;
+    let num_downloaded_segments = selected_quality_index_array.length;
+    let quality_window = Math.min(slice_window, num_downloaded_segments);
+
+    for (let i = 1; i <= quality_window; i++){
+        let m_qualityIndex = getQualityIndexFromBitrate(selected_quality_index_array[num_downloaded_segments-i], length_quality);
+        average_quality += qualityLevelList[m_qualityIndex];
+    }
+
+    average_quality = average_quality/quality_window;
+	
+	denominator_exp = Math.exp(2*qualityLevelList[bitratesKbps.length-1]-2*qualityLevelList[0]);
+	
+	// console.log("averageQuality: " + average_quality);
+	// console.log("Denominator: " + denominator_exp);
+
+	// Daniele - Normalize all the costs
+    bandwidthCost = temp;
+	// let maxBandwidthCost = bitrates[bitrates.length-1]*1.0/estimated_throghputKbps;
+	// let normBandwidthCost = bandwidthCost / maxBandwidthCost;
+    bufferCost = temp*(SD/(currentbufferS - low_buff_thresS));
+	// let maxBufferCost = bitrates[bitrates.length-1]*1.0/estimated_throghputKbps * (SD/(currentBufferS - low_buff_thresS));
+	// let normBufferCost = bufferCost / maxBufferCost;
+    qualityCost = Math.exp(qualityLevelList[length_quality-1] + average_quality - 2*current_quality_level)/denominator_exp;
+	// let maxQualityCost = Math.exp(qualityLevelList[length_quality-1] + average_quality - 2*current_quality_level) / Math.exp(2*qualityLevelList[num_considered_bitrate-1]-2*qualityLevelList[0]); // Daniele
+	// energyCost = aPar * selected_quality_index_array[num_downloaded_segments-i] + bPar; // Linearly dependent on the bitrate
+	// Normalize the energy cost with the maximum available bitrate (TODO)
+	// energyCost = aPar * bitrates[qualityIndex] + bPar;
+	// energyCost = (aPar * bitrates[qualityIndex] + bPar) / (aPar * bitrates[bitrates.length-1] + bPar); // Linearly dependent on the bitrate;
+	// Model from "Modeling of Energy Consumption and Streaming Video QoE using a Crowdsourcing Dataset"
+	energyCost = 0.035 * fps + 5.76e-9 * availableVideoQualities[qualityIndex].height * availableVideoQualities[qualityIndex].width + 6.97e-6 * bitrates[qualityIndex] + 3.24e-5 * bitrates[qualityIndex] + 1.15 + 4.16 + 8.52;
+	totalCost = alpha*bandwidthCost + beta*bufferCost + gamma*qualityCost + psi*energyCost;
+	// let normTotalCost = alpha*normBandwidthCost + beta*normBufferCost + gamma*normQualityCost + psi*normEnergyCost;
+	
+	console.log("bandwidthCost: " + bandwidthCost + ", bufferCost: " + bufferCost + ", qualityCost: " + qualityCost + ", energyCost: " + energyCost);
+	console.log("alphaBandwidthCost: " + alpha*bandwidthCost + ", betaBufferCost: " + beta*bufferCost + ", gammaQualityCost: " + gamma*qualityCost + ", psiEnergyCost: " + psi*energyCost);
+
+    return totalCost;
+	// return normTotalCost;
+}
+
+function onVideoAdaptation() {
+  const length = bitratesKbps.length;
+  
+  low_buff_thresS = SD;
+  if (downloadedData == null || currentBufferS < SD){
+    downloadedData = availableVideoQualities[0]
+    return downloadedData;
+  }
+  selected_quality_index_array.push(downloadedData.bitrate/1000)
+  num_downloaded_segments = selected_quality_index_array.length
+
+  let lowest_cost = Number.MAX_SAFE_INTEGER;
+  let max_quality = 0;
+
+  smoothThroughputKbps = getSmoothThroughput(0.125, lastThroughputKbps, smoothThroughputKbps);
+  var estimated_throghputKbps = Math.min(smoothThroughputKbps, lastThroughputKbps);
+
+  console.log("Throughput: " + lastThroughputKbps + "kbps");
+  console.log(bitratesKbps);
+  qualityLevelList = getQualityFunction(bitratesKbps, document.getElementById('quality_function').value);
+
+  for (let i = length-1; i >= 0; i--){
+    if (bitratesKbps[i] < lastThroughputKbps * (1+0.1)) { // MMSP
+      // if (bitratesKbps[i] < smoothThroughputKbps * (1+0.1)) {
+      max_quality = i;
+	  console.log("Bitrate quality " + i + ":" + bitratesKbps);
+      break;
+    }
+  }
+
+  if (max_quality === 0) {
+    next_selected_quality = max_quality;
+  }
+
+  if (document.getElementById("quality_function").value == "linear") {
+    multiplier = 100;
+	if (isMathDet) {
+      setWeightsLinear(m_xi, m_delta, qualityLevelList, SD);
+	}
+  } else {
+    multiplier = 10000;
+	if (isMathDet) {
+      setWeightsLogarit(m_xi, m_delta, qualityLevelList, SD);
+	}
+  }
+
+  console.log(max_quality);
+  for (let i = 1; i <= max_quality; i++) {
+    let currentTotalCost = Math.round(multiplier*getTotalCost_v3(bitratesKbps, i, estimated_throghputKbps, currentBufferS));
+    if (currentTotalCost <= lowest_cost) {
+      next_selected_quality = i;
+      lowest_cost = currentTotalCost;
+    }
+  }
+
+  // check if it's suitable to decrease the quality
+  const threshold_ = 0.2
+  if (lastBufferS - currentBufferS < lastBufferS*threshold_ && next_selected_quality < last_selected_quality) {
+    next_selected_quality = last_selected_quality;
+  }
+  
+  last_selected_quality = next_selected_quality;
+  var finalDecision = availableVideoQualities[next_selected_quality]
+
+  downloadedData = finalDecision;
+  lastBufferS = currentBufferS;
+
+  return finalDecision
+
+}
+
+function getQualityIndexFromBitrate(bitrate, bitrates_length) {
+  for (let i = 0; i < bitrates_length; i ++) {
+    if (bitrate == bitratesKbps[i]) {
+      return i;
+    }
+  }
+  return 0;
+  
+}
+
+</script>
+</body>
+</html>
