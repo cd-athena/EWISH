@@ -1,0 +1,53 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the article from preferred-citation and the software itself."
+authors:
+- family-names: "Lorenzi"
+  given-names: "Daniele"
+  orcid: "https://orcid.org/0000-0003-3689-6315"
+- family-names: "Tashtarian"
+  given-names: "Farzad"
+  orcid: "https://orcid.org/0000-0002-5584-6690" 
+- family-names: "Amirpour"
+  given-names: "Hadi"
+  orcid: "https://orcid.org/0000-0001-9853-1720"
+- family-names: "Timmerer"
+  given-names: "Christian"
+  orcid: "https://orcid.org/0000-0002-0031-5243"
+- family-names: "Hellwagner"
+  given-names: "Hermann"
+  orcid: "https://orcid.org/0000-0003-1114-2584"
+title: "MCOM-Live: A Multi-Codec Optimization Model at the Edge for Live Streaming"
+version: 1.0.0
+date-released: 2023-03-31
+url: "https://github.com/cd-athena/MCOM"
+preferred-citation:
+  type: conference-paper
+  isbn: "9783031278181"
+  collection-title: "Proceedings of the 29th International Conference on MultiMedia Modeling"
+  collection-type: proceedings
+  authors:
+    - family-names: "Lorenzi"
+	  given-names: "Daniele"
+	  orcid: "https://orcid.org/0000-0003-3689-6315"
+	- family-names: "Tashtarian"
+	  given-names: "Farzad"
+	  orcid: "https://orcid.org/0000-0002-5584-6690" 
+	- family-names: "Amirpour"
+	  given-names: "Hadi"
+	  orcid: "https://orcid.org/0000-0001-9853-1720"
+	- family-names: "Timmerer"
+	  given-names: "Christian"
+	  orcid: "https://orcid.org/0000-0002-0031-5243"
+	- family-names: "Hellwagner"
+	  given-names: "Hermann"
+	  orcid: "https://orcid.org/0000-0003-1114-2584"
+  doi: 10.1145/3625468.3652179
+  title: "MCOM-Live: A Multi-Codec Optimization Model at the Edge for Live Streaming"
+  year: "2023"
+  location:
+        name: "Bergen, Norway"
+  conference:
+        name: "MMM '24"
+  publisher:
+        name: "Springer Nature Switzerland"
+        address: "Cham"
