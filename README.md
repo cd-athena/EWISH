@@ -16,7 +16,7 @@ In order to shape the traffic it is required to install [wondershaper].
 
 ### Manual experiment ###
 
-To run the experiment manually or test that everything has been set correctly, open the *index_ewish_bitmovin.hmtl* file on your browser.
+To run the experiment manually or test that everything has been set correctly, open the *index_ewish_bitmovin.html* file on your browser.
 Three different options can be set through the interface:
 
 1. ABR strategy: 'throughputBased', 'BBA' (Buffer-Based Adaptation), 'SARA' (Segment-Aware Rate Adaptation), 'WISH', and 'EWISH'. This is the ABR technique adopted for requesting the video segments.
