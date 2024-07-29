@@ -4,50 +4,44 @@ authors:
 - family-names: "Lorenzi"
   given-names: "Daniele"
   orcid: "https://orcid.org/0000-0003-3689-6315"
+- family-names: "Nguyen"
+  given-names: "Minh"
+  orcid: "https://orcid.org/0000−0002−9691−1719"
 - family-names: "Tashtarian"
   given-names: "Farzad"
   orcid: "https://orcid.org/0000-0002-5584-6690" 
-- family-names: "Amirpour"
-  given-names: "Hadi"
-  orcid: "https://orcid.org/0000-0001-9853-1720"
 - family-names: "Timmerer"
   given-names: "Christian"
   orcid: "https://orcid.org/0000-0002-0031-5243"
-- family-names: "Hellwagner"
-  given-names: "Hermann"
-  orcid: "https://orcid.org/0000-0003-1114-2584"
-title: "MCOM-Live: A Multi-Codec Optimization Model at the Edge for Live Streaming"
+title: "E-WISH: An Energy-aware ABR Algorithm For Green HTTP Adaptive Video Streaming"
 version: 1.0.0
-date-released: 2023-03-31
-url: "https://github.com/cd-athena/MCOM"
+date-released: 2024-03-14
+url: "https://github.com/cd-athena/EWISH"
 preferred-citation:
   type: conference-paper
-  isbn: "9783031278181"
-  collection-title: "Proceedings of the 29th International Conference on MultiMedia Modeling"
+  isbn: "9798400704932"
+  collection-title: "Proceedings of the 3rd Mile-High Video Conference"
   collection-type: proceedings
   authors:
   - family-names: "Lorenzi"
     given-names: "Daniele"
     orcid: "https://orcid.org/0000-0003-3689-6315"
+  - family-names: "Nguyen"
+    given-names: "Minh"
+    orcid: "https://orcid.org/0000−0002−9691−1719"
   - family-names: "Tashtarian"
     given-names: "Farzad"
     orcid: "https://orcid.org/0000-0002-5584-6690" 
-  - family-names: "Amirpour"
-    given-names: "Hadi"
-    orcid: "https://orcid.org/0000-0001-9853-1720"
   - family-names: "Timmerer"
     given-names: "Christian"
     orcid: "https://orcid.org/0000-0002-0031-5243"
-  - family-names: "Hellwagner"
-    given-names: "Hermann"
-    orcid: "https://orcid.org/0000-0003-1114-2584"
-  doi: 10.1145/3625468.3652179
-  title: "MCOM-Live: A Multi-Codec Optimization Model at the Edge for Live Streaming"
-  year: "2023"
+  doi: 10.1145/3638036.364080
+  title: "E-WISH: An Energy-aware ABR Algorithm For Green HTTP Adaptive Video Streaming"
+  year: "2024"
   location:
-        name: "Bergen, Norway"
+        name: "Denver, CO, USA"
   conference:
-        name: "MMM '24"
+        name: "MHV '24"
   publisher:
-        name: "Springer Nature Switzerland"
-        address: "Cham"
+        name: "Association for Computing Machinery"
+        address: "New York, NY, USA"
